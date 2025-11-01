@@ -29,7 +29,6 @@ SafeRL-Research is built to:
 
 - **Core Framework:** Python, OpenAI Safety Gymnasium
 - **Libraries:** Matplotlib (for visualization)
-- **Concepts:** Reinforcement Learning (RL), Safe RL, Markov Decision Processes (MDPs), Cost-Constrained RL, Hazard-Aware Learning
 
 ---
 
