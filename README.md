@@ -25,6 +25,23 @@ SafeRL-Research is built to:
 - Facilitate **benchmarking and evaluation** in environments with hazards or safety-critical requirements.
 - Serve as a **demonstration of advanced RL expertise** for recruiters, collaborators, and the research community.
 
+### Technologies Used
+
+- **Core Framework:** Python, OpenAI Safety Gymnasium
+- **Libraries:** Matplotlib (for visualization)
+- **Concepts:** Reinforcement Learning (RL), Safe RL, Markov Decision Processes (MDPs), Cost-Constrained RL, Hazard-Aware Learning
+
+---
+
+## Structure
+
+The repository is structured to be highly modular and extensible:
+
+- **`agents/base_agent.py`:** Defines the `BaseAgent` abstract class, ensuring all agents follow a consistent API for action selection, model updates, and saving/loading. This promotes a plug-and-play architecture for algorithm development.
+- **`config/training_config.py`:** Centralizes key training hyperparameters (e.g., `NUM_EPISODES`, `MAX_STEPS_PER_EPISODE`), allowing for easy configuration of experiments without modifying the core logic.
+- **`env.py`:** Wraps the `safety_gymnasium` environment to provide a consistent interface and handle environment-specific logic, such as collision detection.
+- **`main.py`:** The main entry point for running experiments, orchestrating the agent-environment interaction loop.
+
 ---
 
 ## Key Features
