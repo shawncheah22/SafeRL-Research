@@ -27,7 +27,7 @@ SafeRL-Research is built to:
 
 ### Technologies Used
 
-- **Core Framework:** Python, OpenAI Safety Gymnasium
+- **Core Framework:** Python, OpenAI Safety Gymnasium, PyTorch
 - **Libraries:** Matplotlib (for visualization)
 
 ---
