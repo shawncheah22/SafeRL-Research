@@ -41,7 +41,6 @@ class DQNAgent(BaseAgent):
         self.t_step = 0
 
         # Discretization mapping (needed for action selection)
-        # Refined action space for more nuanced control
         self.speed_actions = [-5.0, 0.0, 5.0, 10.0, 15.0] # Slower speeds for better control
         self.steer_actions = [-0.5, -0.25, 0.0, 0.25, 0.5] # Finer steering angles (~28.6, ~14.3 degrees)
 
