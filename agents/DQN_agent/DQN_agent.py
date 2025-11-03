@@ -37,12 +37,14 @@ class DQNAgent(BaseAgent):
         self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=self.learning_rate)
 
         # Replay memory
-        self.memory = ReplayBufferClass(self.batch_size, self.device)
+        self.memory = ReplayBufferClass(buffer_size=100000, device=self.device)
         self.t_step = 0
 
         # Discretization mapping (needed for action selection)
-        self.speed_actions = [-20.0, -10.0, 0.0, 10.0, 20.0]
-        self.steer_actions = [-0.785, -0.3925, 0.0, 0.3925, 0.785]
+        # Refined action space for more nuanced control
+        self.speed_actions = [-5.0, 0.0, 5.0, 10.0, 15.0] # Slower speeds for better control
+        self.steer_actions = [-0.5, -0.25, 0.0, 0.25, 0.5] # Finer steering angles (~28.6, ~14.3 degrees)
+
         # The agent will output an index 0-24, which needs mapping to the continuous space 
             
     def select_action(self, state, episilon):
@@ -78,8 +80,9 @@ class DQNAgent(BaseAgent):
     def update(self, state, action, reward, next_state, done): 
         '''
         Stores the transition and checks if it's time to learn.
+        Returns the loss if a learning step was performed, otherwise None.
         '''
-
+        loss = None
         # Store experience in replay memory
         self.memory.push(state, action, reward, next_state, done)
 
@@ -88,7 +91,8 @@ class DQNAgent(BaseAgent):
         # Check if conditions are met to learn 
         if self.t_step == 0 and len(self.memory) > self.batch_size:
             experiences = self.memory.sample(self.batch_size)
-            self.learn(experiences, self.gamma)
+            loss = self.learn(experiences, self.gamma)
+        return loss
 
     def save(self, filename: str, episode: int, epsilon: float, history_data: dict):
         """
@@ -125,7 +129,8 @@ class DQNAgent(BaseAgent):
             default_history = {
                 'cumulative_collisions': [],
                 'collisions_per_episode': [],
-                'rewards_per_episode': []
+                'rewards_per_episode': [],
+                'losses_per_episode': []
             }
             return 0, self.config.EPS_START, default_history
             
@@ -145,7 +150,8 @@ class DQNAgent(BaseAgent):
         history_data = checkpoint.get('history_data', {
             'cumulative_collisions': [],
             'collisions_per_episode': [],
-            'rewards_per_episode': []
+            'rewards_per_episode': [],
+            'losses_per_episode': []
         })
 
         print(f"Checkpoint loaded from: {full_path}. Resuming from episode {start_episode}.")
@@ -177,6 +183,8 @@ class DQNAgent(BaseAgent):
         self.optimizer.step()
 
         self._soft_update(self.qnetwork_local, self.qnetwork_target, self.tau)
+
+        return local_network_loss.item()
 
     def _soft_update(self, local_model, target_model, tau):
         """
