@@ -1,41 +1,50 @@
-from diagram import Diagram
-from env import Environment
 from config.training_config import TrainingConfig
-import numpy as np
 from agents.DQN_agent.DQN_agent import DQNAgent
 from agents.DQN_agent.Qnetwork import QNetwork
 from agents.DQN_agent.replay_buffer import ReplayBuffer
 from agents.DQN_agent.constants import DQNAgentConstants
 from env import Environment
 from diagram import Diagram
+import os
 
 def training_loop():
     """
     Main function to run the DQN agent training loop.
     """
-    env = Environment(env_id='SafetyRacecarGoal1-v0', render_mode='None')
+    env = Environment(env_id='SafetyRacecarGoal1-v0', render_mode='none')
     config = DQNAgentConstants()
 
     # Instantiate the DQNAgent
     agent = DQNAgent(env, config, QNetwork, ReplayBuffer)
+
+    model_filename = f"dqn_checkpoint.pth"
+    start_episode = 0
+    epsilon = config.EPS_START
+    cumulative_collisions_history = []
+    collisions_per_episode = []
+    rewards_per_episode = []
+    
+    if os.path.exists(os.path.join("agents/DQN_agent/weights", model_filename)):
+        start_episode, epsilon, history_data = agent.load(model_filename)
+        cumulative_collisions_history = history_data.get('cumulative_collisions', [])
+        collisions_per_episode = history_data.get('collisions_per_episode', [])
+        rewards_per_episode = history_data.get('rewards_per_episode', [])
+        print(f"Resuming training from episode {start_episode} with epsilon {epsilon:.4f}")
     
     num_episodes = TrainingConfig.NUM_EPISODES
     max_steps_per_episode = TrainingConfig.MAX_STEPS_PER_EPISODE
     
     # Epsilon setup
-    epsilon = config.EPS_START
     eps_decay = config.EPS_DECAY
     eps_end = config.EPS_END
+    checkpoint_every = config.CHECKPOINT_EVERY
     
-    # Data collection
-    total_collisions = 0
-    cumulative_collisions_history = []
-    collisions_per_episode = []
-    rewards_per_episode = []
+    # Restore total_collisions from the last entry in the cumulative history
+    total_collisions = cumulative_collisions_history[-1] if cumulative_collisions_history else 0
 
     print(f"Running for {num_episodes} episodes...")
 
-    for episode in range(num_episodes):
+    for episode in range(start_episode, num_episodes):
         # Env reset returns the initial state
         state, _ = env.reset() 
         episode_reward = 0.0
@@ -43,25 +52,14 @@ def training_loop():
         for step in range(max_steps_per_episode):
             
             # Agent Select Action (Epsilon-Greedy)
-            action_vector = agent.select_action(state, epsilon)
+            action_vector, discrete_action_index = agent.select_action(state, epsilon)
             
             # Step the environment
             _obs, reward, _cost, terminated, truncated, _info = env.step(action_vector)
             
             next_state = _obs
             done = terminated or truncated
-            
-            
-            # 1. Find the indices of the continuous values
-            speed_val = action_vector[0]
-            steer_val = action_vector[1]
-            
-            # The .index() call finds the position of the value in the list
-            speed_index = agent.speed_actions.index(speed_val)
-            steer_index = agent.steer_actions.index(steer_val)
-            
-            discrete_action_index = (speed_index * len(agent.steer_actions)) + steer_index
-            
+
             # The agent.update() expects the discrete action index.
             agent.update(state, discrete_action_index, reward, next_state, done)
             
@@ -82,12 +80,22 @@ def training_loop():
         
         print(f"Episode {episode + 1}: Reward = {episode_reward:.2f} | Collisions = {env.collision_count} | Total Collisions = {total_collisions} | Epsilon = {epsilon:.4f}")
 
-    # 4. Plot the results
-    diagram = Diagram(cumulative_collisions_history, collisions_per_episode, rewards_per_episode, num_episodes)
+        # Periodically save a checkpoint
+        if (episode + 1) % checkpoint_every == 0:
+            history_to_save = {
+                'cumulative_collisions': cumulative_collisions_history,
+                'collisions_per_episode': collisions_per_episode,
+                'rewards_per_episode': rewards_per_episode
+            }
+            agent.save(model_filename, episode, epsilon, history_to_save)
+
+    # Plot the results
+    diagram = Diagram(cumulative_collisions_history, collisions_per_episode, rewards_per_episode)
     diagram.plot()
     
-    # 5. Save the final model
-    agent.save(f"dqn_final_episode_{num_episodes}.pth")
+    # Save the final model
+    final_history = {'cumulative_collisions': cumulative_collisions_history, 'collisions_per_episode': collisions_per_episode, 'rewards_per_episode': rewards_per_episode}
+    agent.save(f"dqn_final_episode_{num_episodes}.pth", num_episodes - 1, epsilon, final_history)
 
 if __name__ == '__main__':
     training_loop()

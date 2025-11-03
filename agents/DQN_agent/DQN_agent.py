@@ -46,10 +46,10 @@ class DQNAgent(BaseAgent):
         # The agent will output an index 0-24, which needs mapping to the continuous space 
             
     def select_action(self, state, episilon):
-        '''
-        Returns a continuous action [speed, steering] from the state 
-        following an epsilon-greedy policy.
-        '''
+        """
+        Returns a continuous action for the environment and the discrete action index
+        for learning, following an epsilon-greedy policy.
+        """
         # convert state to tensor
         state = torch.from_numpy(state).float().unsqueeze(0).to(self.device)
 
@@ -73,7 +73,7 @@ class DQNAgent(BaseAgent):
 
         continuous_action = np.array([speed, steering], dtype=np.float64)
 
-        return continuous_action
+        return continuous_action, discrete_action_index
 
     def update(self, state, action, reward, next_state, done): 
         '''
@@ -90,18 +90,26 @@ class DQNAgent(BaseAgent):
             experiences = self.memory.sample(self.batch_size)
             self.learn(experiences, self.gamma)
 
-    def save(self, filename):
+    def save(self, filename: str, episode: int, epsilon: float, history_data: dict):
         """
-        Save the agent's learned local Q-Network model to a file inside the 'weights/' folder.
+        Save the agent's checkpoint (model, optimizer, episode, epsilon, history) to a file.
         """
         save_dir = "agents/DQN_agent/weights"
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
         
         full_path = os.path.join(save_dir, filename)
-        
-        torch.save(self.qnetwork_local.state_dict(), full_path)
-        print(f"Agent model saved to: {full_path}")
+
+        checkpoint = {
+            'episode': episode,
+            'epsilon': epsilon,
+            'model_state_dict': self.qnetwork_local.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'history_data': history_data
+        }
+
+        torch.save(checkpoint, full_path)
+        print(f"Checkpoint saved to: {full_path}")
 
     def load(self, filename):
         """
@@ -113,17 +121,37 @@ class DQNAgent(BaseAgent):
 
         if not os.path.exists(full_path):
             print(f"Error: Model file not found at {full_path}")
-            return
+            # Return defaults if no file
+            default_history = {
+                'cumulative_collisions': [],
+                'collisions_per_episode': [],
+                'rewards_per_episode': []
+            }
+            return 0, self.config.EPS_START, default_history
             
-        state_dict = torch.load(full_path, map_location=self.device)
+        checkpoint = torch.load(full_path, map_location=self.device)
 
         # Apply the weights to the Local Network
-        self.qnetwork_local.load_state_dict(state_dict)
+        self.qnetwork_local.load_state_dict(checkpoint['model_state_dict'])
         
         # Apply the weights to the Target Network (synchronize them)
-        self.qnetwork_target.load_state_dict(state_dict)
+        self.qnetwork_target.load_state_dict(checkpoint['model_state_dict'])
+
+        # Load optimizer state
+        self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         
-        print(f"Agent models loaded successfully from: {full_path}")
+        start_episode = checkpoint.get('episode', 0) + 1
+        epsilon = checkpoint.get('epsilon', self.config.EPS_START)
+        history_data = checkpoint.get('history_data', {
+            'cumulative_collisions': [],
+            'collisions_per_episode': [],
+            'rewards_per_episode': []
+        })
+
+        print(f"Checkpoint loaded from: {full_path}. Resuming from episode {start_episode}.")
+        print(f"Loaded history with {len(history_data['rewards_per_episode'])} entries.")
+
+        return start_episode, epsilon, history_data
 
     def learn(self, experiences, gamma):
         '''
@@ -149,7 +177,6 @@ class DQNAgent(BaseAgent):
         self.optimizer.step()
 
         self._soft_update(self.qnetwork_local, self.qnetwork_target, self.tau)
-
 
     def _soft_update(self, local_model, target_model, tau):
         """
