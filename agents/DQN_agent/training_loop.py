@@ -23,12 +23,14 @@ def training_loop():
     cumulative_collisions_history = []
     collisions_per_episode = []
     rewards_per_episode = []
+    losses_per_episode = []
     
     if os.path.exists(os.path.join("agents/DQN_agent/weights", model_filename)):
         start_episode, epsilon, history_data = agent.load(model_filename)
         cumulative_collisions_history = history_data.get('cumulative_collisions', [])
         collisions_per_episode = history_data.get('collisions_per_episode', [])
         rewards_per_episode = history_data.get('rewards_per_episode', [])
+        losses_per_episode = history_data.get('losses_per_episode', [])
         print(f"Resuming training from episode {start_episode} with epsilon {epsilon:.4f}")
     
     num_episodes = TrainingConfig.NUM_EPISODES
@@ -48,6 +50,8 @@ def training_loop():
         # Env reset returns the initial state
         state, _ = env.reset() 
         episode_reward = 0.0
+        episode_losses = []
+        
         
         for step in range(max_steps_per_episode):
             
@@ -60,8 +64,10 @@ def training_loop():
             next_state = _obs
             done = terminated or truncated
 
-            # The agent.update() expects the discrete action index.
-            agent.update(state, discrete_action_index, reward, next_state, done)
+            # The agent.update() returns loss if a learning step was performed.
+            loss = agent.update(state, discrete_action_index, reward, next_state, done)
+            if loss is not None:
+                episode_losses.append(loss)
             
             state = next_state # Move to the next state
             episode_reward += float(reward)
@@ -77,24 +83,27 @@ def training_loop():
         collisions_per_episode.append(env.collision_count)
         cumulative_collisions_history.append(total_collisions)
         rewards_per_episode.append(episode_reward)
+        avg_loss = sum(episode_losses) / len(episode_losses) if episode_losses else 0
+        losses_per_episode.append(avg_loss)
         
-        print(f"Episode {episode + 1}: Reward = {episode_reward:.2f} | Collisions = {env.collision_count} | Total Collisions = {total_collisions} | Epsilon = {epsilon:.4f}")
+        print(f"Episode {episode + 1}: Reward = {episode_reward:.2f} | Avg Loss = {avg_loss:.4f} | Collisions = {env.collision_count} | Total Collisions = {total_collisions} | Epsilon = {epsilon:.4f}")
 
         # Periodically save a checkpoint
         if (episode + 1) % checkpoint_every == 0:
             history_to_save = {
                 'cumulative_collisions': cumulative_collisions_history,
                 'collisions_per_episode': collisions_per_episode,
-                'rewards_per_episode': rewards_per_episode
+                'rewards_per_episode': rewards_per_episode,
+                'losses_per_episode': losses_per_episode
             }
             agent.save(model_filename, episode, epsilon, history_to_save)
 
     # Plot the results
-    diagram = Diagram(cumulative_collisions_history, collisions_per_episode, rewards_per_episode)
+    diagram = Diagram(cumulative_collisions_history, collisions_per_episode, rewards_per_episode, losses_per_episode)
     diagram.plot()
     
     # Save the final model
-    final_history = {'cumulative_collisions': cumulative_collisions_history, 'collisions_per_episode': collisions_per_episode, 'rewards_per_episode': rewards_per_episode}
+    final_history = {'cumulative_collisions': cumulative_collisions_history, 'collisions_per_episode': collisions_per_episode, 'rewards_per_episode': rewards_per_episode, 'losses_per_episode': losses_per_episode}
     agent.save(f"dqn_final_episode_{num_episodes}.pth", num_episodes - 1, epsilon, final_history)
 
 if __name__ == '__main__':
